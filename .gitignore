@@ -1,0 +1,6 @@
+leanpkg.toml
+leanpkg.path
+gpt.lean
+_target
+openai.key
+

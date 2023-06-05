@@ -1,0 +1,91 @@
+#!/usr/bin/env python3
+import openai
+import sys
+import os
+import subprocess
+
+# path to write lean code to
+lean_path=os.path.dirname(sys.argv[0])+'/gpt.lean'
+# API key stored at
+api_key_path=os.path.dirname(sys.argv[0])+'/openai.key'
+
+# first prompt
+first_prompt="Here is a proof in natural language that if n^2 is even, then n is even. I want you to convert this proof into lean3. Theorem: if an integer n has the property that n^2 is even, then n is even. Proof: we'll prove this by cases depending on whether n is even or odd. If n is even, we are done. If n is odd, then there is an integer k so that n=2*k+1. Then n^2=(2*k+1)^2=4*k^2+4*k+1 = 2*(2*k^2+2^k)+1. This means that n^2 is odd, contradicting the fact that n^2 is even."
+
+# read key from file
+def read_api_key():
+    # check it exists
+    if not os.path.exists(api_key_path):
+        print("Error: could not find API key at '"+api_key_path+"'",file=sys.stderr)
+        exit(-1)
+    api_key_file=open(api_key_path,'r')
+    openai.api_key=api_key_file.read().rstrip()
+    api_key_file.close()
+
+read_api_key()
+
+# query GPT
+def GPT_query(prompt, history):
+
+    print("Sending prompt:", file=sys.stderr)
+    print(prompt, file=sys.stderr)
+
+    # write prompt to history
+    history.append(
+        {"role": "user", "content": prompt},
+    )
+
+    response=openai.ChatCompletion.create(
+      model="gpt-4",
+      messages=history
+    )
+
+    response_text=response["choices"][0]["text"]
+
+    # print to stderr
+    print("Response:", file=sys.stderr)
+    print(response_text, file=sys.stderr)
+
+    # add response to history
+    history.append(
+        {"role": "assistant", "content": response_text}
+    )
+
+    return response_text
+
+# extract lean code from GPT response
+def lean_extract(text):
+    #TODO
+    return text
+
+# run lean on code in 'text'
+def lean_run(text):
+    # write to file
+    outfile=open(lean_path,'w')
+    print(text, file=outfile)
+    outfile.close()
+
+    # run lean
+    res = subprocess.run(['lean', lean_path], stdout=subprocess.PIPE)
+
+    # output
+    return res.stdout.decode("utf-8")
+
+# init history
+history=[
+    # this line tells the model how to behave, helpful assistant is a good default
+    {"role": "system", "content": "You are a helpful assistant."},
+]
+
+# first prompt
+gpt_out=GPT_query(first_prompt, history)
+# output from lean
+lean_output=lean_run(lean_extract(gpt_out))
+
+# success?
+if len(lean_output)!=0:
+    # pipe back into GPT
+    gpt_out=GPT_query("This failed with the error: '"+lean_output+"'", history)
+
+
+
