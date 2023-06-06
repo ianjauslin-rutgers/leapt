@@ -31,7 +31,14 @@ first_prompt="This is a test."
 # instructions passed to gpt
 gpt_instructions="Be a helpful assistant"
 
-# init colors
+# maximum number of queries
+max_queries=100
+# maximum number of tokens
+max_tokens=10000
+# be interactive every n queries
+interactive_freq=1
+
+# colors
 # header format
 fmt_header='\033[1;32m'
 # >>>> format 
@@ -81,6 +88,16 @@ def parse_config(file):
             gpt_ver=config["openai"]["gpt_ver"]
         if "api_key" in config["openai"]:
             openai.api_key=config["openai"]["api_key"]
+    if "limits" in config:
+        if "max_queries" in config["limits"]:
+            global max_queries
+            max_queries=int(config["limits"]["max_queries"])
+        if "max_tokens" in config["limits"]:
+            global max_tokens
+            max_tokens=int(config["limits"]["max_tokens"])
+        if "interactive_freq" in config["limits"]:
+            global interactive_freq
+            interactive_freq=int(config["limits"]["interactive_freq"])
     if "general" in config:
         if "editor" in config["general"]:
             global editor
@@ -216,32 +233,35 @@ history=[
 prompt=first_prompt
 
 # loop
-while True:
+counter=1
+while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_token_count+prompt_token_count<max_tokens):
     print(fmt_lead+">>>>"+fmt_normal+" total usage so far: "+fmt_token+str(completion_token_count)+" completion tokens, "+str(prompt_token_count)+" prompt tokens (total "+str(completion_token_count+prompt_token_count)+")"+fmt_normal, file=sys.stderr)
 
     print(fmt_lead+">>>>"+fmt_header+" Prompt:"+fmt_normal, file=sys.stderr)
     print(prompt, file=sys.stderr)
 
+    # interactive
     cont=True
-    while True:
-        reply=input(fmt_question+"Continue? [Y/n/edit] "+fmt_normal).rstrip()
-        if reply=="" or reply=="Y" or reply=="y" or reply=="Yes" or reply=="yes":
-            cont=True
-            break
-        elif reply=="n" or reply=="N" or reply=="no" or reply=="No" or reply=="q" or reply=="quit":
-            cont=False
-            break
-        # open an editor to edit prompt
-        elif reply=="edit":
-            prompt=edit(prompt, tmp_prompt)
-            # print for confirmation
-            print("", file=sys.stderr)
-            print(fmt_lead+">>>>"+fmt_header+" Prompt:"+fmt_normal, file=sys.stderr)
-            print(prompt, file=sys.stderr)
-            continue
-        else:
-            print(fmt_error+"Did not understand input"+fmt_normal)
-            continue
+    if interactive_freq>0 and counter%interactive_freq==0:
+        while True:
+            reply=input(fmt_question+"Continue? [Y/n/edit] "+fmt_normal).rstrip()
+            if reply=="" or reply=="Y" or reply=="y" or reply=="Yes" or reply=="yes":
+                cont=True
+                break
+            elif reply=="n" or reply=="N" or reply=="no" or reply=="No" or reply=="q" or reply=="quit":
+                cont=False
+                break
+            # open an editor to edit prompt
+            elif reply=="edit":
+                prompt=edit(prompt, tmp_prompt)
+                # print for confirmation
+                print("", file=sys.stderr)
+                print(fmt_lead+">>>>"+fmt_header+" Prompt:"+fmt_normal, file=sys.stderr)
+                print(prompt, file=sys.stderr)
+                continue
+            else:
+                print(fmt_error+"Did not understand input"+fmt_normal)
+                continue
 
     # stop if no
     if cont==False:
@@ -260,21 +280,23 @@ while True:
     print(to_lean, file=sys.stderr)
     print("", file=sys.stderr)
 
-    while True:
-        reply=input(fmt_question+"Edit? [N/y] "+fmt_normal).rstrip()
-        if reply=="" or reply=="n" or reply=="N" or reply=="no" or reply=="No":
-            break
-        # open an editor to edit prompt
-        elif reply=="y" or reply=="Y" or reply=="yes" or reply=="Yes" or reply=="edit":
-            to_lean=edit(to_lean, tmp_prompt)
-            # print for confirmation
-            print("", file=sys.stderr)
-            print(fmt_lead+">>>>"+fmt_header+" Pass to lean:"+fmt_normal, file=sys.stderr)
-            print(to_lean, file=sys.stderr)
-            continue
-        else:
-            print(fmt_error+"Did not understand input"+fmt_normal)
-            continue
+    # interactive
+    if interactive_freq>0 and counter%interactive_freq==0:
+        while True:
+            reply=input(fmt_question+"Edit? [N/y] "+fmt_normal).rstrip()
+            if reply=="" or reply=="n" or reply=="N" or reply=="no" or reply=="No":
+                break
+            # open an editor to edit prompt
+            elif reply=="y" or reply=="Y" or reply=="yes" or reply=="Yes" or reply=="edit":
+                to_lean=edit(to_lean, tmp_prompt)
+                # print for confirmation
+                print("", file=sys.stderr)
+                print(fmt_lead+">>>>"+fmt_header+" Pass to lean:"+fmt_normal, file=sys.stderr)
+                print(to_lean, file=sys.stderr)
+                continue
+            else:
+                print(fmt_error+"Did not understand input"+fmt_normal)
+                continue
 
     # output from lean
     lean_output=lean_run(to_lean)
@@ -292,6 +314,9 @@ while True:
 
     # prepare prompt for next iteration
     prompt="This failed with the error: \""+lean_output+"\""
+
+    # increment counter
+    counter=counter+1
 
 # print chat to file
 outfile=open(history_file, 'w')
