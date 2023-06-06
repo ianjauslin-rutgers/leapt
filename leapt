@@ -108,9 +108,9 @@ def lean_extract(text):
     # default
     out=text
     # get code in between ``` if available
-    matches=re.finditer(r'```(.*?)```', text, flags=re.DOTALL)
+    matches=re.finditer(r'```(lean)?(.*?)```', text, flags=re.DOTALL)
     for match in matches:
-        out=match.group(1)
+        out=match.group(2)
     return out
 
 # run lean on code in 'text'
