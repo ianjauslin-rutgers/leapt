@@ -5,6 +5,14 @@ leapt (pronounced 'Lee-P-T') is an attempt to get GPT to formalize lean proofs
 To run leapt, you will need python along with the `python-openai` package. You
 will also need an OpenAI key, see below. The default editor is `nano`.
 
+leapt requires Lean 3 with a local copy of mathlib, which can be downloaded by
+running
+```bash
+$ leanproject new leapt-lean
+$ mv leapt-lean/* ./
+$ rm -r leapt-lean
+```
+
 # OpenAI key
 To use leapt, you need to have an openai API key (which you can get from yout
 openai account page). Store the key in a file called "openai.key" in the same
