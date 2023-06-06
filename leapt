@@ -50,14 +50,17 @@ fmt_normal='\033[0;39m'
 completion_token_count=0
 prompt_token_count=0
 
+
 # CLI arguments
-parser=argparse.ArgumentParser(description="leapt: An attempt to get GPT to generate formal lean proofs")
+def parse_CLI():
+    parser=argparse.ArgumentParser(description="leapt: An attempt to get GPT to generate formal lean proofs")
 
-parser.add_argument("-c", metavar="conf_file", help="path to configuration file")
+    parser.add_argument("-c", metavar="conf_file", help="path to configuration file")
 
-args=parser.parse_args()
-if args.c!=None:
-    config_file=args.c
+    args=parser.parse_args()
+    if args.c!=None:
+        global config_file
+        config_file=args.c
 
 
 # read config file
@@ -195,8 +198,9 @@ def edit(text, path):
     tmpfile.close()
     return out
 
-# read configuration file
+# read CLI and configuration file
 parse_config(config_file)
+parse_CLI()
 
 # read api key if not already in config
 if openai.api_key == None:
