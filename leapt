@@ -4,14 +4,46 @@ import sys
 import os
 import subprocess
 import re
+import datetime
+
+# version of gpt to use
+gpt_ver=3
 
 # path to write lean code to
 lean_path=os.path.dirname(sys.argv[0])+'/gpt.lean'
 # API key stored at
 api_key_path=os.path.dirname(sys.argv[0])+'/openai.key'
+# tmpfile for prompt editing
+tmp_prompt="/tmp/leapt_prompt.txt"
+# editor for prompt editing
+editor="nano"
+# save history to file
+history_file=os.path.dirname(sys.argv[0])+'/history/'+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 # first prompt
 first_prompt="Here is a proof in natural language that if n^2 is even, then n is even. I want you to convert this proof into lean3. Theorem: if an integer n has the property that n^2 is even, then n is even. Proof: we'll prove this by cases depending on whether n is even or odd. If n is even, we are done. If n is odd, then there is an integer k so that n=2*k+1. Then n^2=(2*k+1)^2=4*k^2+4*k+1 = 2*(2*k^2+2^k)+1. This means that n^2 is odd, contradicting the fact that n^2 is even."
+
+# instructions passed to gpt
+gpt_instructions="Only include code in your responses, no other explanations."
+
+# init colors
+# header format
+fmt_header='\033[1;32m'
+# >>>> format 
+fmt_lead='\033[1;32m'
+# token usage format 
+fmt_token='\033[1;31m'
+# error format 
+fmt_error='\033[1;35m'
+# question format 
+fmt_question='\033[1;36m'
+# normal
+fmt_normal='\033[0;39m'
+
+
+# init token count
+completion_token_count=0
+prompt_token_count=0
 
 # read key from file
 def read_api_key():
@@ -26,41 +58,59 @@ def read_api_key():
 read_api_key()
 
 # query GPT
-def GPT_query(prompt, history):
-
-    print("Sending prompt:", file=sys.stderr)
-    print(prompt, file=sys.stderr)
+def GPT_query(prompt, history, gpt_ver):
 
     # write prompt to history
     history.append(
         {"role": "user", "content": prompt},
     )
 
-    response=openai.ChatCompletion.create(
-      model="gpt-4",
-      messages=history
-    )
+    if gpt_ver==4:
+        response=openai.ChatCompletion.create(
+          model="gpt-4",
+          messages=history
+        )
+        out=response["choices"][0]["text"]
+        completion_tokens=response["usage"]["completion_tokens"]
+        prompt_tokens=response["usage"]["completion_tokens"]
+    elif gpt_ver==3:
+        response=openai.ChatCompletion.create(
+          model="gpt-3.5-turbo",
+          messages=history
+        )
+        out=response["choices"][0]["message"]["content"]
+        completion_tokens=response["usage"]["completion_tokens"]
+        prompt_tokens=response["usage"]["completion_tokens"]
+    elif gpt_ver==0:
+        out="```\n theorem even_square_implies_even (n : ℤ) : n^2 % 2 = 0 → n % 2 = 0 :=\n begin\n intro h,\n cases int.mod_two_eq_zero_or_one n with hn1 hn2,\n { exact hn2 },\n { exfalso,\n have h2 : n^2 % 2 = 1,\n { rw [int.sq, hn1], norm_num },\n rw h at h2,\n norm_num at h2, },\n end\n ```"
+        completion_tokens=0
+        prompt_tokens=0
+    else:
+        print("error: unspported gpt version: "+gpt_ver, file=sys.stderr)
+        exit(-1)
 
-    response_text=response["choices"][0]["text"]
+    print("used "+fmt_token+str(completion_tokens)+" completion tokens, "+str(prompt_tokens)+" prompt tokens (total "+str(completion_tokens+prompt_tokens)+")"+fmt_normal, file=sys.stderr)
 
-    # print to stderr
-    print("Response:", file=sys.stderr)
-    print(response_text, file=sys.stderr)
+    # count tokens
+    global completion_token_count
+    global prompt_token_count
+    completion_token_count=completion_token_count+completion_tokens
+    prompt_token_count=prompt_token_count+prompt_tokens
 
     # add response to history
     history.append(
-        {"role": "assistant", "content": response_text}
+        {"role": "assistant", "content": out}
     )
-
-    return response_text
+    return out
 
 # extract lean code from GPT response
 def lean_extract(text):
-    matches=re.findall(r'<code>(.*?)</code>', text, re.DOTALL)
+    # default
+    out=text
+    # get code in between ``` if available
+    matches=re.finditer(r'```(.*?)```', text, flags=re.DOTALL)
     for match in matches:
-        out=match.group[1]
-        # remove all tags
-        out=re.sub(r'<.*?>', '', out)
+        out=match.group(1)
     return out
 
 # run lean on code in 'text'
@@ -76,21 +126,109 @@ def lean_run(text):
     # output
     return res.stdout.decode("utf-8")
 
+# edit a string in editor
+def edit(text, path):
+    # write prompt
+    tmpfile=open(path, 'w')
+    print(text, file=tmpfile)
+    tmpfile.close()
+    # edit prompt
+    subprocess.run([editor, path])
+    # read prompt
+    tmpfile=open(path, 'r')
+    out=tmpfile.read()
+    tmpfile.close()
+    return out
+
+
 # init history
 history=[
-    # this line tells the model how to behave, helpful assistant is a good default
-    {"role": "system", "content": "You are a helpful assistant."},
+    # this line tells the model how to behave
+    {"role": "system", "content": gpt_instructions},
 ]
 
 # first prompt
-gpt_out=GPT_query(first_prompt, history)
-# output from lean
-lean_output=lean_run(lean_extract(gpt_out))
+prompt=first_prompt
 
-# success?
-if len(lean_output)!=0:
-    # pipe back into GPT
-    gpt_out=GPT_query("This failed with the error: '"+lean_output+"'", history)
+# loop
+while True:
+    print(fmt_lead+">>>>"+fmt_normal+" total usage so far: "+fmt_token+str(completion_token_count)+" completion tokens, "+str(prompt_token_count)+" prompt tokens (total "+str(completion_token_count+prompt_token_count)+")"+fmt_normal, file=sys.stderr)
 
+    print(fmt_lead+">>>>"+fmt_header+" Prompt:"+fmt_normal, file=sys.stderr)
+    print(prompt, file=sys.stderr)
 
+    cont=True
+    while True:
+        reply=input(fmt_question+"Continue? [Y/n/edit] "+fmt_normal).rstrip()
+        if reply=="" or reply=="Y" or reply=="y" or reply=="Yes" or reply=="yes":
+            cont=True
+            break
+        elif reply=="n" or reply=="N" or reply=="no" or reply=="No" or reply=="q" or reply=="quit":
+            cont=False
+            break
+        # open an editor to edit prompt
+        elif reply=="edit":
+            prompt=edit(prompt, tmp_prompt)
+            # print for confirmation
+            print("", file=sys.stderr)
+            print(fmt_lead+">>>>"+fmt_header+" Prompt:"+fmt_normal, file=sys.stderr)
+            print(prompt, file=sys.stderr)
+            continue
+        else:
+            print(fmt_error+"Did not understand input"+fmt_normal)
+            continue
 
+    # stop if no
+    if cont==False:
+        break
+
+    # send to GPT
+    gpt_out=GPT_query(prompt, history, gpt_ver)
+
+    # print
+    print(fmt_lead+">>>>"+fmt_header+" Response:"+fmt_normal, file=sys.stderr)
+    print(gpt_out, file=sys.stderr)
+    print("", file=sys.stderr)
+
+    to_lean=lean_extract(gpt_out)
+    print(fmt_lead+">>>>"+fmt_header+" Pass to lean:"+fmt_normal, file=sys.stderr)
+    print(to_lean, file=sys.stderr)
+    print("", file=sys.stderr)
+
+    while True:
+        reply=input(fmt_question+"Edit? [N/y] "+fmt_normal).rstrip()
+        if reply=="" or reply=="n" or reply=="N" or reply=="no" or reply=="No":
+            break
+        # open an editor to edit prompt
+        elif reply=="y" or reply=="Y" or reply=="yes" or reply=="Yes" or reply=="edit":
+            to_lean=edit(to_lean, tmp_prompt)
+            # print for confirmation
+            print("", file=sys.stderr)
+            print(fmt_lead+">>>>"+fmt_header+" Pass to lean:"+fmt_normal, file=sys.stderr)
+            print(to_lean, file=sys.stderr)
+            continue
+        else:
+            print(fmt_error+"Did not understand input"+fmt_normal)
+            continue
+
+    # output from lean
+    lean_output=lean_run(to_lean)
+    # filter lean output (remove path to file)
+    lean_output=re.sub(r'^/[^:]*:',"", lean_output, flags=re.MULTILINE)
+
+    # print
+    print(fmt_lead+">>>>"+fmt_header+" Lean returns:"+fmt_normal, file=sys.stderr)
+    print(lean_output, file=sys.stderr)
+    print("", file=sys.stderr)
+
+    # success?
+    if len(lean_output)==0:
+        break
+
+    # prepare prompt for next iteration
+    prompt="This failed with the error: \""+lean_output+"\""
+
+# print chat to file
+outfile=open(history_file, 'w')
+print(history, file=outfile)
+outfile.close()
