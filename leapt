@@ -5,14 +5,18 @@ import os
 import subprocess
 import re
 import datetime
+import configparser
 
+## defaults
 # version of gpt to use
-gpt_ver=3
+gpt_ver="gpt-3.5-turbo"
 
 # path to write lean code to
 lean_path=os.path.dirname(sys.argv[0])+'/gpt.lean'
 # API key stored at
 api_key_path=os.path.dirname(sys.argv[0])+'/openai.key'
+# configuration file
+config_file=os.path.dirname(sys.argv[0])+'/leapt.conf'
 # tmpfile for prompt editing
 tmp_prompt="/tmp/leapt_prompt.txt"
 # editor for prompt editing
@@ -21,10 +25,10 @@ editor="nano"
 history_file=os.path.dirname(sys.argv[0])+'/history/'+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
 # first prompt
-first_prompt="Here is a proof in natural language that if n^2 is even, then n is even. I want you to convert this proof into lean3. Theorem: if an integer n has the property that n^2 is even, then n is even. Proof: we'll prove this by cases depending on whether n is even or odd. If n is even, we are done. If n is odd, then there is an integer k so that n=2*k+1. Then n^2=(2*k+1)^2=4*k^2+4*k+1 = 2*(2*k^2+2^k)+1. This means that n^2 is odd, contradicting the fact that n^2 is even."
+first_prompt="This is a test."
 
 # instructions passed to gpt
-gpt_instructions="Only include code in your responses, no other explanations."
+gpt_instructions="Be a helpful assistant"
 
 # init colors
 # header format
@@ -45,6 +49,48 @@ fmt_normal='\033[0;39m'
 completion_token_count=0
 prompt_token_count=0
 
+# read config file
+def parse_config(file):
+    config=configparser.ConfigParser()
+    config.read(file)
+
+    if "gpt" in config:
+        if "first_prompt" in config["gpt"]:
+            global first_prompt
+            first_prompt=config["gpt"]["first_prompt"]
+        if "gpt_instructions" in config["gpt"]:
+            global gpt_instructions
+            gpt_instructions=config["gpt"]["gpt_instructions"]
+    if "openai" in config:
+        if "gpt_ver" in config["openai"]:
+            global gpt_ver
+            gpt_ver=config["openai"]["gpt_ver"]
+        if "api_key" in config["openai"]:
+            openai.api_key=config["openai"]["api_key"]
+    if "general" in config:
+        if "editor" in config["general"]:
+            global editor
+            editor=config["general"]["editor"]
+        if "lean_path" in config["general"]:
+            global lean_path
+            lean_path=relpath(config["general"]["lean_path"])
+        if "api_key_path" in config["general"]:
+            global api_key_path
+            api_key_path=relpath(config["general"]["api_key_path"])
+        if "tmp_prompt" in config["general"]:
+            global tmp_prompt
+            tmp_prompt=relpath(config["general"]["tmp_prompt"])
+        if "history_file" in config["general"]:
+            global history_file
+            history_file=relpath(config["general"]["history_file"])
+
+# relative path to executable directory
+def relpath(path):
+    if len(path)==0 or path[0]!='/':
+        return os.path.dirname(sys.argv[0])+'/'+path
+    else:
+        return path
+
 # read key from file
 def read_api_key():
     # check it exists
@@ -55,8 +101,6 @@ def read_api_key():
     openai.api_key=api_key_file.read().rstrip()
     api_key_file.close()
 
-read_api_key()
-
 # query GPT
 def GPT_query(prompt, history, gpt_ver):
 
@@ -65,7 +109,7 @@ def GPT_query(prompt, history, gpt_ver):
         {"role": "user", "content": prompt},
     )
 
-    if gpt_ver==4:
+    if gpt_ver=="gpt-4":
         response=openai.ChatCompletion.create(
           model="gpt-4",
           messages=history
@@ -73,7 +117,7 @@ def GPT_query(prompt, history, gpt_ver):
         out=response["choices"][0]["text"]
         completion_tokens=response["usage"]["completion_tokens"]
         prompt_tokens=response["usage"]["completion_tokens"]
-    elif gpt_ver==3:
+    elif gpt_ver=="gpt-3.5-turbo":
         response=openai.ChatCompletion.create(
           model="gpt-3.5-turbo",
           messages=history
@@ -81,12 +125,12 @@ def GPT_query(prompt, history, gpt_ver):
         out=response["choices"][0]["message"]["content"]
         completion_tokens=response["usage"]["completion_tokens"]
         prompt_tokens=response["usage"]["completion_tokens"]
-    elif gpt_ver==0:
+    elif gpt_ver=="test":
         out="```\n theorem even_square_implies_even (n : ℤ) : n^2 % 2 = 0 → n % 2 = 0 :=\n begin\n intro h,\n cases int.mod_two_eq_zero_or_one n with hn1 hn2,\n { exact hn2 },\n { exfalso,\n have h2 : n^2 % 2 = 1,\n { rw [int.sq, hn1], norm_num },\n rw h at h2,\n norm_num at h2, },\n end\n ```"
         completion_tokens=0
         prompt_tokens=0
     else:
-        print("error: unspported gpt version: "+gpt_ver, file=sys.stderr)
+        print("error: unspported gpt version: '"+gpt_ver+"'", file=sys.stderr)
         exit(-1)
 
     print("used "+fmt_token+str(completion_tokens)+" completion tokens, "+str(prompt_tokens)+" prompt tokens (total "+str(completion_tokens+prompt_tokens)+")"+fmt_normal, file=sys.stderr)
@@ -140,6 +184,12 @@ def edit(text, path):
     tmpfile.close()
     return out
 
+# read configuration file
+parse_config(config_file)
+
+# read api key if not already in config
+if openai.api_key == None:
+    read_api_key()
 
 # init history
 history=[

@@ -22,11 +22,4 @@ history to a file in the `history` directory for future use.
 
 The latest lean code obtained from GPT is saved in the `gpt.lean` file.
 
-Several options can be changed by editing the top of the `leapt` file.
-* To change the first prompt, edit `first_prompt`.
-* To change the behaviour of GPT, edit `gpt_instructions`.
-* By default, leapt runs on gpt-3.5. To change this, edit `gpt_ver`:
-  - `3` for gpt-3.5-turbo
-  - `4` for gpt-4
-* To change the default editor, edit `editor`.
-* Various paths can be changed as well.
+Several options can be set in the `leapt.conf` file.
