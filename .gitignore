@@ -3,4 +3,5 @@ leanpkg.path
 gpt.lean
 _target
 openai.key
+leapt.conf
 
