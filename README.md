@@ -14,8 +14,9 @@ directory as the `leapt` executable.
 Run `leapt`. This will send the first prompt to GPT, extract the appropriate
 lean code, have lean compile it, and send the errors back to GPT.
 
-Several options can be set in the `leapt.conf` file. To use a different
-configuration file, use the `-c <config_file>` argument.
+Several options can be set in the `leapt.conf` file, which you can create by
+copying the `leapt.conf.sample` file. To use a different configuration file,
+use the `-c <config_file>` argument.
 
 By default, leapt will prompt for confirmation throughout the process, and will
 allow you to edit the prompts, and the lean code. By default, it uses the
