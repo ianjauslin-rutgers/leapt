@@ -6,6 +6,7 @@ import subprocess
 import re
 import datetime
 import configparser
+import argparse
 
 ## defaults
 # version of gpt to use
@@ -48,6 +49,16 @@ fmt_normal='\033[0;39m'
 # init token count
 completion_token_count=0
 prompt_token_count=0
+
+# CLI arguments
+parser=argparse.ArgumentParser(description="leapt: An attempt to get GPT to generate formal lean proofs")
+
+parser.add_argument("-c", metavar="conf_file", help="path to configuration file")
+
+args=parser.parse_args()
+if args.c!=None:
+    config_file=args.c
+
 
 # read config file
 def parse_config(file):

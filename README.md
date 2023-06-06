@@ -22,4 +22,5 @@ history to a file in the `history` directory for future use.
 
 The latest lean code obtained from GPT is saved in the `gpt.lean` file.
 
-Several options can be set in the `leapt.conf` file.
+Several options can be set in the `leapt.conf` file. To use a different
+configuration file, use the `-c <config_file>` argument.
