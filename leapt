@@ -235,6 +235,7 @@ prompt=first_prompt
 # loop
 counter=1
 while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_token_count+prompt_token_count<max_tokens):
+    print(fmt_lead+">>>>"+fmt_normal+" query nr: "+str(counter), file=sys.stderr)
     print(fmt_lead+">>>>"+fmt_normal+" total usage so far: "+fmt_token+str(completion_token_count)+" completion tokens, "+str(prompt_token_count)+" prompt tokens (total "+str(completion_token_count+prompt_token_count)+")"+fmt_normal, file=sys.stderr)
 
     print(fmt_lead+">>>>"+fmt_header+" Prompt"+fmt_normal, file=sys.stderr)
