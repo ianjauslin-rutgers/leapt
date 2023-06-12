@@ -1,0 +1,47 @@
+#!/bin/bash
+
+## automatically find imports for a lean file
+## writes the imports to stdout
+
+# path to mathlib
+mathlib=$(dirname "$0")/../_target/deps/mathlib/src
+
+if [ -z "$1" ]; then
+  echo "usage: autoimport <lean_file>" 1>&2
+  exit -1
+fi
+
+# location of lean file
+leanfile="$1"
+
+# run lean
+err=$(lean "$leanfile")
+# is there an unkown identifier?
+unknowns=$(echo "$err" | sed -nr "/^.*error: unknown identifier '([^']*)'/s//\1/p")
+
+for unknown in $unknowns; do
+  echo "Unkown identifier: $unknown" 1>&2
+
+  # look for unknown identifier in mathlib
+  import=$(grep -Erl "(lemma|constant|axiom|theorem|def|class|structure|inductive) $unknown " "$mathlib" | head -n 1)
+
+  # if didn't find it
+  if [ -z "$import" ]; then
+    echo "could not find matching import" 1>&2
+    continue
+  fi
+
+  # remove initial path
+  import="${import#$mathlib/}"
+  # remove suffix
+  import="${import%.lean}"
+  # replace '/'
+  import="${import//\//.}"
+
+  echo "found import: $import" 1>&2
+
+  echo "import $import"
+  ## append at beginning of file
+  #cat <(echo "import $import") "$leanfile" > "$leanfile".tmp
+  #mv "$leanfile".tmp "$leanfile"
+done

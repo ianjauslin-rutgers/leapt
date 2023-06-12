@@ -208,6 +208,21 @@ def lean_run(text):
     # output
     return res.stdout.decode("utf-8")
 
+# run autoimport on code in 'text'
+def autoimport_run(text):
+    # write to file
+    outfile=open(lean_path,'w')
+    print(text, file=outfile)
+    outfile.close()
+
+    # run autoimport
+    res = subprocess.run([os.path.dirname(sys.argv[0])+'/bin/autoimport', lean_path], stderr=subprocess.PIPE, stdout=subprocess.PIPE)
+
+    print(res.stderr.decode("utf-8"), file=sys.stderr)
+
+    # output
+    return res.stdout.decode("utf-8")
+
 # edit a string in editor
 def edit(text, path):
     # write prompt
@@ -236,11 +251,6 @@ prompt=first_intro+"\n"+informal_proof
 # loop
 counter=1
 while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_token_count+prompt_token_count<max_tokens):
-    # read formal proof
-    infile=open(lean_path,'r')
-    formal_proof="```"+infile.read()+"```"
-    infile.close()
-
     print(fmt_lead+">>>>"+fmt_normal+" query nr: "+str(counter), file=sys.stderr)
     print(fmt_lead+">>>>"+fmt_normal+" total usage so far: "+fmt_token+str(completion_token_count)+" completion tokens, "+str(prompt_token_count)+" prompt tokens (total "+str(completion_token_count+prompt_token_count)+")"+fmt_normal, file=sys.stderr)
 
@@ -291,6 +301,14 @@ while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_t
     print("", file=sys.stderr)
 
     to_lean=lean_extract(gpt_out)
+
+    # add missing imports
+    print(fmt_lead+">>>>"+fmt_header+" Attempt to add missing imports:"+fmt_normal, file=sys.stderr)
+    autoimports=autoimport_run(to_lean)
+    if autoimports != "":
+        to_lean=autoimports+"\n"+to_lean
+    print("", file=sys.stderr)
+
     print(fmt_lead+">>>>"+fmt_header+" Pass to lean"+fmt_normal, file=sys.stderr)
     print(to_lean, file=sys.stdout)
     print("", file=sys.stderr)
@@ -314,7 +332,7 @@ while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_t
                 print(fmt_error+"Did not understand input"+fmt_normal, file=sys.stderr)
                 continue
 
-    # output from lean
+    # run lean
     lean_error=lean_run(to_lean)
     # filter lean output (remove path to file)
     lean_error=re.sub(r'^/[^:]*:',"", lean_error, flags=re.MULTILINE)
@@ -346,6 +364,10 @@ while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_t
     outfile.close()
 
     # prepare prompt for next iteration
+    # read formal proof
+    infile=open(lean_path,'r')
+    formal_proof="```"+infile.read()+"```"
+    infile.close()
     prompt=informal_proof_intro+"\n"+informal_proof+"\n"+formal_proof_intro+"\n"+formal_proof+"\n"+lean_error_intro+"\n'"+lean_error+"'"
 
     # increment counter
