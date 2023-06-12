@@ -1,6 +1,10 @@
-[gpt]
-## first prompt to send the model
-first_prompt="Here is a proof in natural language that if n^2 is even, then n is even. I want you to convert this proof into lean3. Theorem: if an integer n has the property that n^2 is even, then n is even. Proof: we'll prove this by cases depending on whether n is even or odd. If n is even, we are done. If n is odd, then there is an integer k so that n=2*k+1. Then n^2=(2*k+1)^2=4*k^2+4*k+1 = 2*(2*k^2+2^k)+1. This means that n^2 is odd, contradicting the fact that n^2 is even."
+[prompt]
+## prompt format: informal_proof_intro+informal_proof+formal_proof_intro+formal_proof+lean_error_intro+lean_error
+#first_intro="Formalize the following proof in lean 3:"
+#informal_proof_intro="I am trying to formalize the following proof in lean 3:"
+informal_proof="Theorem: if an integer n has the property that n^2 is even, then n is even. Proof: we'll prove this by cases depending on whether n is even or odd. If n is even, we are done. If n is odd, then there is an integer k so that n=2*k+1. Then n^2=(2*k+1)^2=4*k^2+4*k+1 = 2*(2*k^2+2^k)+1. This means that n^2 is odd, contradicting the fact that n^2 is even."
+#formal_proof_intro="I tried the following code:"
+#lean_error_intro="But lean gives me the following error:"
 
 ## instructions passed to gpt
 gpt_instructions="Only include code in your responses, no other explanations."

@@ -25,8 +25,12 @@ editor="nano"
 # save history to file
 history_file=os.path.dirname(sys.argv[0])+'/history/'+datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 
-# first prompt
-first_prompt="This is a test."
+# prompt elements
+first_intro="Formalize the following proof in lean 3:"
+informal_proof_intro="I am trying to formalize the following proof in lean 3:"
+informal_proof="statement, proof"
+formal_proof_intro="I tried the following code:"
+lean_error_intro="But lean gives me the following error:"
 
 # instructions passed to gpt
 gpt_instructions="Be a helpful assistant"
@@ -75,13 +79,25 @@ def parse_config(file):
     config=configparser.ConfigParser()
     config.read(file)
 
-    if "gpt" in config:
-        if "first_prompt" in config["gpt"]:
-            global first_prompt
-            first_prompt=config["gpt"]["first_prompt"]
-        if "gpt_instructions" in config["gpt"]:
+    if "prompt" in config:
+        if "first_intro" in config["prompt"]:
+            global first_intro
+            first_intro=config["prompt"]["first_intro"]
+        if "informal_proof_intro" in config["prompt"]:
+            global informal_proof_intro
+            informal_proof_intro=config["prompt"]["informal_proof_intro"]
+        if "informal_proof" in config["prompt"]:
+            global informal_proof
+            informal_proof=config["prompt"]["informal_proof"]
+        if "formal_proof_intro" in config["prompt"]:
+            global formal_proof_intro
+            formal_proof_intro=config["prompt"]["formal_proof_intro"]
+        if "lean_error_intro" in config["prompt"]:
+            global lean_error_intro
+            lean_error_intro=config["prompt"]["lean_error_intro"]
+        if "gpt_instructions" in config["prompt"]:
             global gpt_instructions
-            gpt_instructions=config["gpt"]["gpt_instructions"]
+            gpt_instructions=config["prompt"]["gpt_instructions"]
     if "openai" in config:
         if "gpt_ver" in config["openai"]:
             global gpt_ver
@@ -133,17 +149,12 @@ def read_api_key():
     api_key_file.close()
 
 # query GPT
-def GPT_query(prompt, history, gpt_ver):
-
-    # write prompt to history
-    history.append(
-        {"role": "user", "content": prompt},
-    )
+def GPT_query(message, gpt_ver):
 
     if gpt_ver=="gpt-4":
         response=openai.ChatCompletion.create(
           model="gpt-4",
-          messages=history
+          messages=message
         )
         out=response["choices"][0]["text"]
         completion_tokens=response["usage"]["completion_tokens"]
@@ -151,7 +162,7 @@ def GPT_query(prompt, history, gpt_ver):
     elif gpt_ver=="gpt-3.5-turbo":
         response=openai.ChatCompletion.create(
           model="gpt-3.5-turbo",
-          messages=history
+          messages=message
         )
         out=response["choices"][0]["message"]["content"]
         completion_tokens=response["usage"]["completion_tokens"]
@@ -172,10 +183,6 @@ def GPT_query(prompt, history, gpt_ver):
     completion_token_count=completion_token_count+completion_tokens
     prompt_token_count=prompt_token_count+prompt_tokens
 
-    # add response to history
-    history.append(
-        {"role": "assistant", "content": out}
-    )
     return out
 
 # extract lean code from GPT response
@@ -223,18 +230,17 @@ parse_CLI()
 if openai.api_key == None:
     read_api_key()
 
-# init history
-history=[
-    # this line tells the model how to behave
-    {"role": "system", "content": gpt_instructions},
-]
-
 # first prompt
-prompt=first_prompt
+prompt=first_intro+"\n"+informal_proof
 
 # loop
 counter=1
 while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_token_count+prompt_token_count<max_tokens):
+    # read formal proof
+    infile=open(lean_path,'r')
+    formal_proof="```"+infile.read()+"```"
+    infile.close()
+
     print(fmt_lead+">>>>"+fmt_normal+" query nr: "+str(counter), file=sys.stderr)
     print(fmt_lead+">>>>"+fmt_normal+" total usage so far: "+fmt_token+str(completion_token_count)+" completion tokens, "+str(prompt_token_count)+" prompt tokens (total "+str(completion_token_count+prompt_token_count)+")"+fmt_normal, file=sys.stderr)
 
@@ -269,8 +275,15 @@ while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_t
     if cont==False:
         break
 
+    # construct message
+    message=[
+        # this line tells the model how to behave
+        {"role": "system", "content": gpt_instructions},
+        {"role": "user", "content": prompt},
+    ]
+
     # send to GPT
-    gpt_out=GPT_query(prompt, history, gpt_ver)
+    gpt_out=GPT_query(message, gpt_ver)
 
     # print
     print(fmt_lead+">>>>"+fmt_header+" Response"+fmt_normal, file=sys.stderr)
@@ -302,26 +315,38 @@ while (max_queries==0 or counter<max_queries) and (max_tokens==0 or completion_t
                 continue
 
     # output from lean
-    lean_output=lean_run(to_lean)
+    lean_error=lean_run(to_lean)
     # filter lean output (remove path to file)
-    lean_output=re.sub(r'^/[^:]*:',"", lean_output, flags=re.MULTILINE)
+    lean_error=re.sub(r'^/[^:]*:',"", lean_error, flags=re.MULTILINE)
 
     # print
     print(fmt_lead+">>>>"+fmt_header+" Lean returns"+fmt_normal, file=sys.stderr)
-    print(lean_output, file=sys.stdout)
+    print(lean_error, file=sys.stdout)
     print("", file=sys.stderr)
 
     # success?
-    if len(lean_output)==0:
+    if len(lean_error)==0:
         break
 
+    # write to history
+    outfile=open(history_file, 'a')
+    print(">>>> Prompt nr "+str(counter)+":", file=outfile)
+    print("  "+prompt, file=outfile)
+    print("\n", file=outfile)
+    print(">>>>>> Response:", file=outfile)
+    print("  "+gpt_out, file=outfile)
+    print("\n", file=outfile)
+    print(">>>>>> Lean code:", file=outfile)
+    print("  "+to_lean, file=outfile)
+    print("\n", file=outfile)
+    print(">>>>>> error:", file=outfile)
+    print("  "+lean_error, file=outfile)
+    print("\n", file=outfile)
+    print("\n", file=outfile)
+    outfile.close()
+
     # prepare prompt for next iteration
-    prompt="This failed with the error: \""+lean_output+"\""
+    prompt=informal_proof_intro+"\n"+informal_proof+"\n"+formal_proof_intro+"\n"+formal_proof+"\n"+lean_error_intro+"\n'"+lean_error+"'"
 
     # increment counter
     counter=counter+1
-
-# print chat to file
-outfile=open(history_file, 'w')
-print(history, file=outfile)
-outfile.close()
